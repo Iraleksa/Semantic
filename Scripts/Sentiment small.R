@@ -1,5 +1,25 @@
 pacman::p_load(readr,autoplotly,ggplot2,plotly,tidyverse,party,lubridate, caret,dplyr)
 
+#### doParallel ####
+# Required
+library(doParallel)
+
+# Find how many cores are on your machine
+detectCores() # Result = Typically 4 to 6
+
+# Create Cluster with desired number of cores. Don't use them all! Your computer is running other processes. 
+cl <- makeCluster(6)
+
+# Register Cluster
+registerDoParallel(cl)
+
+# Confirm how many cores are now "assigned" to R and RStudio
+getDoParWorkers() # Result 2 
+
+# Stop Cluster. After performing your tasks, stop your cluster. 
+stopCluster(cl)
+
+
 #### 1. Loading Data ####
 Iphone_smallmatrix <- read.csv("Data/Raw/iphone_smallmatrix_labeled_8d.csv")
 galaxy_smallmatrix <- read.csv("Data/Raw/galaxy_smallmatrix_labeled_8d.csv")
@@ -7,6 +27,14 @@ galaxy_smallmatrix <- read.csv("Data/Raw/galaxy_smallmatrix_labeled_8d.csv")
 LargeMatrix <- read.csv("Data/Raw/concatenated_factors.csv")
 
 #### 2. Explore the Data ####
+
+# to check all levels
+
+library(dplyr)
+
+Iphone_smallmatrix %>% 
+  sapply(levels)
+
 # view the variables or attributes of the matrices, and its dimension
 dim(Iphone_smallmatrix)
 dim(galaxy_smallmatrix)
@@ -209,10 +237,8 @@ set.seed(122)
 # Clean_data_strat_all_B<- select(Clean_data_strat,   -LATITUDE, -LONGITUDE)
 
 inTraining <- createDataPartition(Iphone_smallmatrix$iphonesentiment, p = .7, list = FALSE)
-trainSet <- Iphone_smallmatrix[1:4000,][inTraining,]
-testSet <- Iphone_smallmatrix[1:4000,][-inTraining,]
-
-
+trainSet <- Iphone_smallmatrix[inTraining,]
+testSet <- Iphone_smallmatrix[-inTraining,]
 
 
 
@@ -223,11 +249,11 @@ library(e1071)
 library(kknn)
 library(C50)
 library(FactoMineR)
-combined <- c()
 
+combined <- c()
 # models <- c("C5.0", "kknn", "rf", "svm", "kknn")
 
-models <- c("kknn", "rf","C5.0","svmLinearWeights","gbm","adaboost","pca")
+models <- c("kknn", "rf","C5.0","gbm","adaboost")
 t_0 <- proc.time()
 for(i in models) {
   
@@ -236,8 +262,9 @@ for(i in models) {
                method = i, 
                trControl = fitControl,
                tuneLength = 8, 
-               na.action = na.omit
-  )
+               preProcess = c("center","scale"),
+               na.action = na.omit)
+  
   
   pred <- predict(Fit,testSet)
   
@@ -255,7 +282,6 @@ colnames(combined) <- models
 combined
 #### SVM  ####
 
-model <- train(iphonesentiment~., data=trainSet, method="svm", trControl=fitControl, tuneLength=5)
 
 model_svm <- svm(iphonesentiment~., data = trainSet)
 summary (model_svm)
@@ -336,27 +362,54 @@ ggplot(testSet, aes(x=iphonesentiment, y=error_abs_RF, col=iphonesentiment)) +
 geom_point() +geom_smooth() 
 
 
+#### Engineering the Dependant variable ####
+
+# Perhaps combining some of these levels will help increase accuracy and kappa. 
+# The dplyr package recode() function can help us with this. 
+
+# create a new dataset that will be used for recoding sentiment
+Iphone_smallmatrix_RC <- Iphone_smallmatrix
+# recode sentiment to combine factor levels 0 & 1 and 4 & 5
+Iphone_smallmatrix_RC <- recode(Iphone_smallmatrix$iphonesentiment, '0' = 1, '1' = 1, '2' = 2, '3' = 3, '4' = 4, '5' = 4) 
+# inspect results
+summary(Iphone_smallmatrix_RC)
+str(Iphone_smallmatrix_RC)
+# make iphonesentiment a factor
+Iphone_smallmatrix_RC$iphonesentiment <- as.factor(Iphone_smallmatrix$iphonesentiment)
 
 
-#### doParallel ####
-# Required
-library(doParallel)
-
-# Find how many cores are on your machine
-detectCores() # Result = Typically 4 to 6
-
-# Create Cluster with desired number of cores. Don't use them all! Your computer is running other processes. 
-cl <- makeCluster(6)
-
-# Register Cluster
-registerDoParallel(cl)
-
-# Confirm how many cores are now "assigned" to R and RStudio
-getDoParWorkers() # Result 2 
-
-# Stop Cluster. After performing your tasks, stop your cluster. 
-stopCluster(cl)
+# Now model using your best learner. 
+# Did accuracy and kappa increase? Did you review the confusion matrix? 
 
 
+# Principal Component Analysis 
+# Principal Component Analysis (PCA) is a form of feature engineering that removes all of your features
+# and replaces them with mathematical representations of their variance.
 
+# data = training and testing from Iphone_smallmatrix (no feature selection) 
+# create object containing centered, scaled PCA components from training set
+# excluded the dependent variable and set threshold to .95
 
+preprocessParams <- preProcess(trainSet[,-59], method=c("center", "scale", "pca"), thresh = 0.95)
+print(preprocessParams)
+
+# Examine the output. How many components were needed to capture 95% of the variance?
+# If you lower the variance threshold does the number of components stay the same?
+  
+# We now need to apply the PCA model, create training/testing and add the dependant variable.
+
+# use predict to apply pca parameters, create training, exclude dependant
+train.pca <- predict(preprocessParams, training[,-59])
+
+# add the dependent to training
+train.pca$iphonesentiment <- training$iphonesentiment
+
+# use predict to apply pca parameters, create testing, exclude dependant
+test.pca <- predict(preprocessParams, testing[,-59])
+
+# add the dependent to training
+test.pca$iphonesentiment <- testing$iphonesentiment
+
+# inspect results
+str(train.pca)
+str(test.pca)
