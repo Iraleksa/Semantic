@@ -1,0 +1,50 @@
+---
+title: "Sentiment analysis"
+author: "Irina"
+date: "8/2/2019"
+output:
+  rmdformats::readthedown:
+highlight: tango
+gallery: yes
+smooth_scroll: yes
+theme: cosmo
+collapsed: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	fig.align = "center",
+	cache = TRUE
+)
+```
+
+# Executive summary
+
+
+
+
+# Goals
+
+
+
+
+
+# Explore the Data
+
+
+
+
+
+# Preprocessing
+
+
+
+# Next steps
+
+
+
+# Recommendations
+
+
+# Training models & Error assessment

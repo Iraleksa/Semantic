@@ -43,15 +43,54 @@ class
 nuevoIphone<-filter(Iphone_smallmatrix, Mean_row !=0)
 nuevoIphone$Mean_row<-NULL
 
+
+
+
+
+#### Preprocessing and feature selection ####
+
+#### Examine Correlation - Correlation matrix ####
+require(corrplot)
+cor(Iphone_smallmatrix)
+corrplot(cor(Iphone_smallmatrix), order = "hclust")
+
+corrplot(cor(galaxy_smallmatrix), order = "hclust")
+
+# control a wide variety of global options.
+options(max.print=1000000)
+
+
+
+# After identifying features for removal, create a new data set if needed.
+# If there are no highly correlated features with the dependant, move on to Feature Variance. 
+
+# create a new data set and remove features highly correlated with the dependant 
+# iphoneCOR <- iphoneDF
+# iphoneCOR$featureToRemove <- NULL
+
 #### Examine Feature Variance ####
+
+# The distribution of values within a feature is related to how much information that feature holds
+# in the data set. Features with no variance can be said to hold little to no information.
+# Features that have very little, or "near zero variance", may or may not have useful information. 
+# To explore feature variance we can use nearZeroVar() from the caret package. 
+
+#nearZeroVar() with saveMetrics = TRUE returns an object containing a table including:
+# frequency ratio, percentage unique, zero variance and near zero variance 
+
+nzvMetrics <- ?(Iphone_smallmatrix, saveMetrics = TRUE)
+nzvMetrics
+OnlyZeroVar  <- nzvMetrics %>%  filter(zeroVar==TRUE)
+
+
+# Let’s use nearZeroVar() again to create an index of near zero variance features. 
+# The index will allow us to quickly remove features.
 
 # nearZeroVar() with saveMetrics = FALSE returns an vector 
 nzv <- nearZeroVar(Iphone_smallmatrix, saveMetrics = FALSE) 
 nzv
 
-
 # After identifying features for removal, create a new data set.
-
 # create a new data set and remove near zero variance features
 iphoneNZV <- Iphone_smallmatrix[,-nzv]
 str(iphoneNZV)
@@ -82,9 +121,21 @@ saveRDS(rfeResults, file= "rfeResults.rds")
 # Plot results
 plot(rfeResults, type=c("g", "o"))
 
+# with 18 features RMSE is the lowest - 1.324,
+# while, using all 58 featurs will give us RMSE=1.329.
+# The difference is not very high, but it will impact computational cost for running model
+
+# Create dataset contianing only important feature accordint to the rfeResults
+importance <- varImp(rfeResults, scale=TRUE)
+importance['feature'] <- row.names(importance)
+importance <- importance[,c(2,1)]
+rownames(importance) <- NULL
+
+# Plot important features
+ggplot(data=importance, aes(x=reorder(feature, -Overall), y=Overall, fill=feature)) +
+geom_bar(stat="identity")+ theme_classic()+theme(axis.text.x = element_text(angle=60, hjust=1))
 
 # After identifying features for removal, create a new data set and add the dependant variable.  
-
 # create new data set with rfe recommended features
 iphoneRFE <- Iphone_smallmatrix[,predictors(rfeResults)]
 
@@ -95,55 +146,197 @@ iphoneRFE$iphonesentiment <- Iphone_smallmatrix$iphonesentiment
 str(iphoneRFE)
 
 
+#### Repeat the same steps for galaxy_smallmatrix ####
 
-#### Preprocessing and feature selection ####
+# Recursive Feature Elimination #
 
-# Examine Correlation - Correlation matrix
-require(corrplot)
-cor(Iphone_smallmatrix)
-corrplot(cor(Iphone_smallmatrix), order = "hclust")
+# Let's sample the data before using RFE
+set.seed(123)
+galaxySample <- galaxy_smallmatrix[sample(1:nrow(galaxy_smallmatrix), 1000, replace=FALSE),]
 
-corrplot(cor(galaxy_smallmatrix), order = "hclust")
+# Set up rfeControl with randomforest, repeated cross validation and no updates
+ctrl_galaxy <- rfeControl(functions = rfFuncs, 
+                   method = "repeatedcv",
+                   repeats = 5,
+                   verbose = FALSE)
 
-# control a wide variety of global options.
-options(max.print=1000000)
+# Use rfe and omit the response variable (attribute 59 iphonesentiment) 
+rfeResults_galaxy <- rfe(galaxySample[,1:58], 
+                         galaxySample$galaxysentiment, 
+                  sizes=(1:58), 
+                  rfeControl=ctrl)
 
+# Get results
+rfeResults_galaxy
+saveRDS(rfeResults_galaxy, file= "rfeResults_galaxy.rds")
 
+# Plot results
+plot(rfeResults_galaxy, type=c("g", "o"))
 
-# After identifying features for removal, create a new data set if needed. If there are no highly correlated features with the dependant, move on to Feature Variance. 
-
-# create a new data set and remove features highly correlated with the dependant 
-# iphoneCOR <- iphoneDF
-# iphoneCOR$featureToRemove <- NULL
-
-# Examine Feature Variance
-
-# The distribution of values within a feature is related to how much information that feature holds
-# in the data set. Features with no variance can be said to hold little to no information.
-# Features that have very little, or "near zero variance", may or may not have useful information. 
-# To explore feature variance we can use nearZeroVar() from the caret package. 
-
-#nearZeroVar() with saveMetrics = TRUE returns an object containing a table including:
-# frequency ratio, percentage unique, zero variance and near zero variance 
-
-nzvMetrics <- nearZeroVar(Iphone_smallmatrix, saveMetrics = TRUE)
-nzvMetrics
-OnlyZeroVar  <- nzvMetrics %>%  filter(zeroVar==TRUE)
+# with 13 features RMSE is the lowest - 1.244,
+# while, using all 58 featurs will give us RMSE=1.252.
 
 
-# Let’s use nearZeroVar() again to create an index of near zero variance features. 
-# The index will allow us to quickly remove features.
+# Create dataset contianing only important feature accordint to the rfeResults
+importance_galaxy <- varImp(rfeResults_galaxy, scale=TRUE)
+importance_galaxy['feature'] <- row.names(importance_galaxy)
+importance_galaxy <- importance_galaxy[,c(2,1)]
+rownames(importance_galaxy) <- NULL
 
-# nearZeroVar() with saveMetrics = FALSE returns an vector 
-nzv <- nearZeroVar(Iphone_smallmatrix, saveMetrics = FALSE) 
-nzv
+# Plot important features
+ggplot(data=importance_galaxy, aes(x=reorder(feature, -Overall), y=Overall, fill=feature)) +
+  geom_bar(stat="identity")+ theme_classic()+theme(axis.text.x = element_text(angle=60, hjust=1))
 
 
-# After identifying features for removal, create a new data set.
+rfeResults_galaxy
+# After identifying features for removal, create a new data set and add the dependant variable.  
+# create new data set with rfe recommended features
+galaxyRFE <- galaxy_smallmatrix[,predictors(rfeResults_galaxy)]
 
-# create a new data set and remove near zero variance features
-iphoneNZV <- Iphone_smallmatrix[,-nzv]
-str(iphoneNZV)
+# add the dependent variable to iphoneRFE
+galaxyRFE$galaxysentiment <- galaxy_smallmatrix$galaxysentiment
+
+# review outcome
+str(galaxyRFE)
+
+#### Model development and evaluation #### 
+
+#### Data partition for training & testing sets ####
+Iphone_smallmatrix$iphonesentiment <- as.factor(Iphone_smallmatrix$iphonesentiment)
+
+set.seed(122)
+
+# Clean_data_strat_all_B<- select(Clean_data_strat,   -LATITUDE, -LONGITUDE)
+
+inTraining <- createDataPartition(Iphone_smallmatrix$iphonesentiment, p = .7, list = FALSE)
+trainSet <- Iphone_smallmatrix[1:4000,][inTraining,]
+testSet <- Iphone_smallmatrix[1:4000,][-inTraining,]
+
+
+
+
+
+fitControl <- trainControl(method = "cv", number=2, verboseIter = T, sampling = "up")
+#Testing models with loop----
+
+library(e1071)
+library(kknn)
+library(C50)
+library(FactoMineR)
+combined <- c()
+
+# models <- c("C5.0", "kknn", "rf", "svm", "kknn")
+
+models <- c("kknn", "rf","C5.0","svmLinearWeights","gbm","adaboost","pca")
+t_0 <- proc.time()
+for(i in models) {
+  
+  Fit <- train(iphonesentiment~.,
+               data= trainSet,
+               method = i, 
+               trControl = fitControl,
+               tuneLength = 8, 
+               na.action = na.omit
+  )
+  
+  pred <- predict(Fit,testSet)
+  
+  res <- postResample(pred,testSet$iphonesentiment)
+  
+  combined <- cbind(combined, res) 
+  
+}
+t_1 <- proc.time()
+time_knn <- t_1-t_0
+print(time_knn/60)
+
+colnames(combined) <- models
+
+combined
+#### SVM  ####
+
+model <- train(iphonesentiment~., data=trainSet, method="svm", trControl=fitControl, tuneLength=5)
+
+model_svm <- svm(iphonesentiment~., data = trainSet)
+summary (model_svm)
+
+pred <- predict(model_svm,testSet)
+confusionMatrix(pred,testSet$iphonesentiment)
+postResample(pred,testSet$iphonesentiment)
+
+
+
+# :::::::::::::::::::::
+for(i in models) {
+  
+  if (i == "kknn") {
+    Fit_KNNN<- train(iphonesentiment~.,
+                 data= trainSet,
+                 method = i, 
+                 trControl = fitControl,
+                 tuneLength = 8, 
+                 na.action = na.omit)
+  }
+  
+  if (i == "kknn") {
+    Fit_KNNN1<- train(iphonesentiment~.,
+                     data= trainSet,
+                     method = i, 
+                     trControl = fitControl,
+                     tuneLength = 8, 
+                     na.action = na.omit)
+  }
+  
+  
+  pred <- predict(Fit,testSet)
+  
+  res <- postResample(pred,testSet$iphonesentiment)
+  
+  combined <- cbind(combined, res) 
+  
+}
+
+# :::::::::::::::::::::
+
+
+#Melt function to store the errors
+require(reshape2)
+compare_model_melt <- melt(combined, varnames = c("metric", "model"))
+compare_model_melt <- as_data_frame(compare_model_melt)
+compare_model_melt
+
+#Plot errors with ggplot----
+
+ggplot(compare_model_melt, aes(x=model, y=value, fill=model))+
+  geom_col()+
+  facet_grid(metric~., scales="free")
+
+str(compare_model_melt)
+
+#Run model RF----
+Fit_RF_iphone <- train(iphonesentiment~.,
+                data= trainSet,
+                method = "rf", 
+                trControl = fitControl,
+                tuneLength = 4, 
+                preProcess = c("center","scale"),
+                na.action = na.omit
+)
+
+varImp(Fit_RF_iphone)
+postResample(Fit_RF_iphone)
+pred_RF_iphone <- predict(Fit_RF_iphone,testSet)
+
+testSet$predict_iphonesentiment_RF<-pred_RF_iphone 
+testSet$error_RF <- testSet$iphonesentiment - testSet$predict_iphonesentiment_RF
+testSet$error_abs_RF <- abs(testSet$iphonesentiment - testSet$predict_iphonesentiment_RF)
+
+
+ggplot(testSet, aes(x=iphonesentiment, y=error_abs_RF, col=iphonesentiment)) + 
+geom_point() +geom_smooth() 
+
+
+
 
 #### doParallel ####
 # Required
@@ -153,7 +346,7 @@ library(doParallel)
 detectCores() # Result = Typically 4 to 6
 
 # Create Cluster with desired number of cores. Don't use them all! Your computer is running other processes. 
-cl <- makeCluster(4)
+cl <- makeCluster(6)
 
 # Register Cluster
 registerDoParallel(cl)
