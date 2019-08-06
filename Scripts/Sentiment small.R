@@ -250,7 +250,7 @@ Iphone_smallmatrix_down <- downSample(Iphone_smallmatrix, Iphone_smallmatrix$iph
 # distribution of the sentiments after downsmapling
 plot_ly(Iphone_smallmatrix_down, x= ~Iphone_smallmatrix_down$Class, type='histogram')
 
-
+Iphone_smallmatrix_down[,60] <- NULL
 # Data partition for training & testing sets #
 Iphone_smallmatrix_down$iphonesentiment <- as.factor(Iphone_smallmatrix_down$iphonesentiment)
 
@@ -292,7 +292,7 @@ combined_1 <- combined
 combined_1 <- as.data.frame(combined_1)
 combined_1$dataset <- "downsample func"
 
-saveRDS(Fit_1, file= "Predicting model for downsampled dataset.rds")
+saveRDS(Fit_1, file= "Fit_1_Predicting model for downsampled dataset.rds")
 
 # stored performance metrics
 colnames(combined) <- models
@@ -306,9 +306,11 @@ combined_pred_1 <-as.data.frame(combined_pred_1)
 
 #### SVM downsample manual -1  ####
 
-model_svm <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
-pred_svm_1 <- predict(model_svm,testSet)
+model_svm1 <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
+pred_svm_1 <- predict(model_svm1,testSet)
 svm_1 <- postResample(pred_svm_1,testSet$iphonesentiment)
+
+saveRDS(svm_1, file= "svm_1_model.rds")
 
 # Adding results of svm funcation to the pool of the previous models
 combined_1$svm <- svm_1
@@ -626,6 +628,7 @@ Iphone_smallmatrix_RC$iphonesentiment <- as.factor(Iphone_smallmatrix_RC$iphones
 
 # Data partition for training & testing sets #
 
+# [,-60]
 set.seed(122)
 inTraining <- createDataPartition(Iphone_smallmatrix_down$iphonesentiment, p = .7, list = FALSE)
 trainSet <- Iphone_smallmatrix_down[inTraining,]
@@ -682,13 +685,13 @@ t_1 <- proc.time()
 time_knn <- t_1-t_0
 print(time_knn/60)
 
-saveRDS(Fit_4, file= "Predicting model pca dataset.rds")
+saveRDS(Fit_4, file= "Fit_4_Predicting model pca dataset.rds")
 
 # stored performance metrics
 colnames(combined) <- models
 combined_4 <- combined
 combined_4 <- as.data.frame(combined_4)
-
+combined_4
 # stored predicted values
 colnames(combined_pred) <- models
 combined_pred_4 <-combined_pred 
@@ -920,7 +923,7 @@ che1 <-ggplotly(che)
 che1
 
 require(gridExtra)
-grid.arrange(comb1, che1, nrow=2)
+grid.arrange(comb, che, nrow=2)
 
 # library("ggpubr")
 figure <- arrange(comb1, che1,
