@@ -1,4 +1,4 @@
-pacman::p_load(readr,autoplotly,ggplot2,plotly,tidyverse,party,lubridate, caret,dplyr)
+pacman::p_load(readr,autoplotly,ggplot2,plotly,tidyverse,party,lubridate, caret,dplyr,esquisse)
 
 
 library(e1071)
@@ -38,3 +38,9 @@ Precious <- read.csv("Data/Created/concatenated_factors_precious.csv")
 Ivan <- read.csv("Data/Created/IVAN_LargeMatrix_1001_1200.csv",header = TRUE, sep = ";")
 
 LargeMatrix <- rbind(Kosta,Irina,Precious,Ivan)
+
+# esquisse:: esquisser()
+summary(LargeMatrix)
+
+Fit_4 <- readRDS("Models/Winner/Predicting model pca dataset.rds", refhook = NULL)
+pred <- predict(Fit_4,LargeMatrix)
