@@ -1,5 +1,14 @@
 pacman::p_load(readr,autoplotly,ggplot2,plotly,tidyverse,party,lubridate, caret,dplyr)
 
+
+library(e1071)
+library(kknn)
+library(C50)
+library(FactoMineR)
+library(fastAdaboost)
+library(adabag)
+library(reshape2)
+
 #### doParallel ####
 # Required
 library(doParallel)
@@ -53,8 +62,8 @@ summary(Iphone_smallmatrix$iphonecampos) # counts positive sentiment mentions of
 summary(galaxy_smallmatrix$galaxysentiment) # there is nothing 
 
 # distribution of the sentiments
-plot_ly(galaxy_smallmatrix, x= ~Iphone_smallmatrix$iphonesentiment, type='histogram')
-plot_ly(Iphone_smallmatrix, x= ~galaxy_smallmatrix$galaxysentiment, type='histogram')
+plot_ly(Iphone_smallmatrix, x= ~Iphone_smallmatrix$iphonesentiment, type='histogram')
+plot_ly(galaxy_smallmatrix, x= ~galaxy_smallmatrix$galaxysentiment, type='histogram')
 
 plot(Iphone_smallmatrix$iphonesentiment, ylab = "Sentiment", main = "Iphone Sentiment")
 plot(galaxy_smallmatrix$galaxysentiment, ylab = "Sentiment", main = "Galaxy Sentiment")
@@ -62,6 +71,10 @@ plot(galaxy_smallmatrix$galaxysentiment, ylab = "Sentiment", main = "Galaxy Sent
 
 hist(Iphone_smallmatrix$iphonesentiment, xlim = c(0,5), ylim = c(0,2000), breaks = 100, 
      xlab = "Iphone sentiment", main="Histogram of Iphone Sentiment")
+
+
+
+
 
 # exclude the instances with no information
 
@@ -106,7 +119,7 @@ options(max.print=1000000)
 #nearZeroVar() with saveMetrics = TRUE returns an object containing a table including:
 # frequency ratio, percentage unique, zero variance and near zero variance 
 
-nzvMetrics <- ?(Iphone_smallmatrix, saveMetrics = TRUE)
+nzvMetrics <- nearZeroVar(Iphone_smallmatrix, saveMetrics = TRUE)
 nzvMetrics
 OnlyZeroVar  <- nzvMetrics %>%  filter(zeroVar==TRUE)
 
@@ -145,6 +158,7 @@ rfeResults <- rfe(iphoneSample[,1:58],
 rfeResults
 
 saveRDS(rfeResults, file= "rfeResults.rds")
+rfeResults <- readRDS("Models/rfeResults.rds", refhook = NULL)
 
 # Plot results
 plot(rfeResults, type=c("g", "o"))
@@ -229,115 +243,274 @@ str(galaxyRFE)
 
 #### Model development and evaluation #### 
 
-#### Data partition for training & testing sets ####
-Iphone_smallmatrix$iphonesentiment <- as.factor(Iphone_smallmatrix$iphonesentiment)
+#### ********** Down Sampling with function downSample  (combined_1)  **********  ####
+# Lets downSample  a data set so that all classes have the same frequency as the minority class.
+
+Iphone_smallmatrix_down <- downSample(Iphone_smallmatrix, Iphone_smallmatrix$iphonesentiment, list = FALSE, yname = "Class")
+# distribution of the sentiments after downsmapling
+plot_ly(Iphone_smallmatrix_down, x= ~Iphone_smallmatrix_down$Class, type='histogram')
+
+
+# Data partition for training & testing sets #
+Iphone_smallmatrix_down$iphonesentiment <- as.factor(Iphone_smallmatrix_down$iphonesentiment)
 
 set.seed(122)
+inTraining <- createDataPartition(Iphone_smallmatrix_down$iphonesentiment, p = .7, list = FALSE)
+trainSet <- Iphone_smallmatrix_down[inTraining,]
+testSet <- Iphone_smallmatrix_down[-inTraining,]
 
-# Clean_data_strat_all_B<- select(Clean_data_strat,   -LATITUDE, -LONGITUDE)
-
-inTraining <- createDataPartition(Iphone_smallmatrix$iphonesentiment, p = .7, list = FALSE)
-trainSet <- Iphone_smallmatrix[inTraining,]
-testSet <- Iphone_smallmatrix[-inTraining,]
-
-
-
-fitControl <- trainControl(method = "cv", number=2, verboseIter = T, sampling = "up")
+fitControl <- trainControl(method = "cv", number=3, verboseIter = T, returnResamp = "all",savePredictions = TRUE)
 #Testing models with loop----
 
-library(e1071)
-library(kknn)
-library(C50)
-library(FactoMineR)
-
 combined <- c()
-# models <- c("C5.0", "kknn", "rf", "svm", "kknn")
+# models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
 
-models <- c("kknn", "rf","C5.0","gbm","adaboost")
+models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
 t_0 <- proc.time()
 for(i in models) {
   
-  Fit <- train(iphonesentiment~.,
+  Fit_1 <- train(iphonesentiment~.,
                data= trainSet,
                method = i, 
                trControl = fitControl,
-               tuneLength = 8, 
-               preProcess = c("center","scale"),
-               na.action = na.omit)
+               tuneLength = 5, 
+               preProc = "zv",
+              na.action = na.omit)
   
-  
-  pred <- predict(Fit,testSet)
-  
-  res <- postResample(pred,testSet$iphonesentiment)
-  
-  combined <- cbind(combined, res) 
-  
+    pred <- predict(Fit_1,testSet)
+    res <- postResample(pred,testSet$iphonesentiment)
+    combined <- cbind(combined, res) 
 }
+
 t_1 <- proc.time()
 time_knn <- t_1-t_0
 print(time_knn/60)
 
 colnames(combined) <- models
-
 combined
-#### SVM  ####
+combined_1 <- combined
+combined_1 <- as.data.frame(combined_1)
+combined_1$dataset <- "downsample func"
 
+saveRDS(Fit_1, file= "Predicting model for downsampled dataset.rds")
 
-model_svm <- svm(iphonesentiment~., data = trainSet)
-summary (model_svm)
+# stored performance metrics
+colnames(combined) <- models
+combined_1 <- combined
+combined_1 <- as.data.frame(combined_1)
 
-pred <- predict(model_svm,testSet)
-confusionMatrix(pred,testSet$iphonesentiment)
-postResample(pred,testSet$iphonesentiment)
+# stored predicted values
+colnames(combined_pred) <- models
+combined_pred_1 <-combined_pred 
+combined_pred_1 <-as.data.frame(combined_pred_1)
 
+#### SVM downsample manual -1  ####
 
+model_svm <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
+pred_svm_1 <- predict(model_svm,testSet)
+svm_1 <- postResample(pred_svm_1,testSet$iphonesentiment)
 
-# :::::::::::::::::::::
-for(i in models) {
-  
-  if (i == "kknn") {
-    Fit_KNNN<- train(iphonesentiment~.,
-                 data= trainSet,
-                 method = i, 
-                 trControl = fitControl,
-                 tuneLength = 8, 
-                 na.action = na.omit)
-  }
-  
-  if (i == "kknn") {
-    Fit_KNNN1<- train(iphonesentiment~.,
-                     data= trainSet,
-                     method = i, 
-                     trControl = fitControl,
-                     tuneLength = 8, 
-                     na.action = na.omit)
-  }
-  
-  
-  pred <- predict(Fit,testSet)
-  
-  res <- postResample(pred,testSet$iphonesentiment)
-  
-  combined <- cbind(combined, res) 
+# Adding results of svm funcation to the pool of the previous models
+combined_1$svm <- svm_1
+combined_1 <- combined_1[,c(ncol(combined_1), 1:(ncol(combined_1)-1))]
+combined_1$dataset <- "downsample manual"
+combined_pred_1$svm<- pred_svm_1
+
+# Converting values from integer to factor and adjusting levels of values according to testSet
+for(i in 1:ncol(combined_pred_1)) {
+  combined_pred_1[,i] <- as.factor(combined_pred_1[,i])
+  levels(combined_pred_1[,i]) <- c("0", "1", "2","3", "4", "5")
   
 }
 
-# :::::::::::::::::::::
+# Print confusion matrix for all the models
+for(i in 1:ncol(combined_pred_1)) {
+  cmRF <- confusionMatrix(combined_pred_1[,i], testSet$iphonesentiment)
+  print(colnames(combined_pred_1)[i])
+  print(cmRF$table)
+}
 
 
-#Melt function to store the errors
-require(reshape2)
-compare_model_melt <- melt(combined, varnames = c("metric", "model"))
-compare_model_melt <- as_data_frame(compare_model_melt)
-compare_model_melt
 
-#Plot errors with ggplot----
+#### ********** Manual downsampling (combined_2) ********** ####
 
-ggplot(compare_model_melt, aes(x=model, y=value, fill=model))+
-  geom_col()+
-  facet_grid(metric~., scales="free")
+Iphone_smallmatrix_down2 <- Iphone_smallmatrix %>% group_by(iphonesentiment) %>% sample_n(390)
+Iphone_smallmatrix_down2$iphonesentiment <- as.factor(Iphone_smallmatrix_down2$iphonesentiment)
 
-str(compare_model_melt)
+set.seed(122)
+inTraining <- createDataPartition(Iphone_smallmatrix_down2$iphonesentiment, p = .7, list = FALSE)
+trainSet <- Iphone_smallmatrix_down2[inTraining,]
+testSet <- Iphone_smallmatrix_down2[-inTraining,]
+
+fitControl <- trainControl(method = "cv", number=3, verboseIter = T, returnResamp = "all",savePredictions = TRUE)
+#Testing models with loop----
+
+# distribution of the sentiments after manual downsmapling
+plot_ly(Iphone_smallmatrix_down2, x= ~Iphone_smallmatrix_down2$iphonesentiment, type='histogram')
+
+combined <- c()
+combined_pred <- c()
+models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
+t_0 <- proc.time()
+for(i in models) {
+  
+  Fit_2 <- train(iphonesentiment~.,
+               data= trainSet,
+               method = i, 
+               trControl = fitControl,
+               tuneLength = 5, 
+               preProc = "zv",
+               na.action = na.omit)
+  
+  pred <- predict(Fit_2,testSet)
+  res <- postResample(pred,testSet$iphonesentiment)
+  combined_pred <- cbind(combined_pred, pred) 
+  combined <- cbind(combined, res) 
+}
+
+t_1 <- proc.time()
+time_knn <- t_1-t_0
+print(time_knn/60)
+
+saveRDS(Fit_2, file= "Predicting model for manually downsampled dataset.rds")
+
+# stored performance metrics
+colnames(combined) <- models
+combined_2 <- combined
+combined_2 <- as.data.frame(combined_2)
+
+# stored predicted values
+colnames(combined_pred) <- models
+combined_pred_2 <-combined_pred 
+combined_pred_2 <-as.data.frame(combined_pred_2)
+
+#### SVM downsample manual -2 ####
+
+model_svm <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
+
+pred_svm_2 <- predict(model_svm,testSet)
+svm_2 <- postResample(pred_svm_2,testSet$iphonesentiment)
+
+# Adding results of svm funcation to the pool of the previous models
+combined_2$svm <- svm_2
+combined_2 <- combined_2[,c(ncol(combined_2), 1:(ncol(combined_2)-1))]
+combined_2$dataset <- "downsample manual"
+combined_pred_2$svm<- pred_svm_2
+
+# Converting values from integer to factor and adjusting levels of values according to testSet
+for(i in 1:ncol(combined_pred_2)) {
+  combined_pred_2[,i] <- as.factor(combined_pred_2[,i])
+  levels(combined_pred_2[,i]) <- c("0", "1", "2","3", "4", "5")
+  
+}
+
+# Print confusion matrix for all the models
+for(i in 1:ncol(combined_pred_2)) {
+  cmRF <- confusionMatrix(combined_pred_2[,i], testSet$iphonesentiment)
+  print(colnames(combined_pred_2)[i])
+  print(cmRF$table)
+}
+
+
+
+
+#### TRAINING MODELS FOR DATASET WITH Recursive Feature Eliminated (RFE) (combined_3) ####
+
+#### Data partition for training & testing sets ####
+iphoneRFE$iphonesentiment <- as.factor(iphoneRFE$iphonesentiment)
+plot_ly(iphoneRFE, x= ~iphoneRFE$iphonesentiment, type='histogram')
+
+iphoneRFE_down_m <- iphoneRFE %>% group_by(iphonesentiment) %>% sample_n(390)
+
+set.seed(122)
+
+inTraining <- createDataPartition(iphoneRFE_down_m$iphonesentiment, p = .7, list = FALSE)
+trainSet <- iphoneRFE_down_m[inTraining,]
+testSet <- iphoneRFE_down_m[-inTraining,]
+
+fitControl <- trainControl(method = "cv", number=3, verboseIter = T, returnResamp = "all",savePredictions = TRUE)
+
+#Testing models with loop----
+
+combined <- c()
+combined_pred <- c()
+models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
+t_0 <- proc.time()
+for(i in models) {
+  
+  Fit_3<- train(iphonesentiment~.,
+              data= trainSet,
+              method = i, 
+              trControl = fitControl,
+              tuneLength = 5, 
+              preProc = "zv",
+              na.action = na.omit)
+  
+  pred <- predict(Fit_3,testSet)
+  res <- postResample(pred,testSet$iphonesentiment)
+  combined_pred <- cbind(combined_pred, pred) 
+  combined <- cbind(combined, res) 
+}
+
+t_1 <- proc.time()
+time_knn <- t_1-t_0
+print(time_knn/60)
+
+saveRDS(Fit_3, file= "Predicting model for RFE & manually downsampled dataset.rds")
+
+# stored performance metrics
+colnames(combined) <- models
+combined_3 <- combined
+combined_3 <- as.data.frame(combined_3)
+
+# stored predicted values
+colnames(combined_pred) <- models
+combined_pred_3 <-combined_pred 
+combined_pred_3 <-as.data.frame(combined_pred_3)
+
+
+#### SVM downsample manual -3 ####
+
+model_svm <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
+summary (model_svm)
+
+pred_svm_3 <- predict(model_svm,testSet)
+svm_3 <- postResample(pred_svm_3,testSet$iphonesentiment)
+
+# Adding results of svm funcation to the pool of the previous models
+combined_3$svm <- svm_3
+combined_3 <- combined_3[,c(ncol(combined_3), 1:(ncol(combined_3)-1))]
+combined_3$dataset <- "downsample manual"
+combined_pred_3$svm<- pred_svm_3
+
+# Converting values from integer to factor and adjusting levels of values according to testSet
+for(i in 1:ncol(combined_pred_3)) {
+  combined_pred_3[,i] <- as.factor(combined_pred_3[,i])
+  levels(combined_pred_3[,i]) <- c("0", "1", "2","3", "4", "5")
+  
+}
+
+# Print confusion matrix for all the models
+for(i in 1:ncol(combined_pred_3)) {
+  cmRF <- confusionMatrix(combined_pred_3[,i], testSet$iphonesentiment)
+  print(colnames(combined_pred_3)[i])
+  print(cmRF$table)
+}
+
+
+
+####  Melt function to store the errors ####
+combined_all <-rbind(combined_1,combined_2,combined_3) 
+combined_all['Error'] <- row.names(combined_all)
+combined_all
+
+combined_melt <- melt(combined_all)
+colnames(combined_melt)[1]<-"dataset"
+colnames(combined_melt)[3]<-"Model"
+
+ggplot(combined_melt, aes(x=Model, y=value,fill=Model))+
+  geom_col()+ggtitle("Error metrics for predicted Lattitude")+theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(Error ~ dataset, scales="fixed")
 
 #Run model RF----
 Fit_RF_iphone <- train(iphonesentiment~.,
