@@ -313,7 +313,7 @@ svm_1 <- postResample(pred_svm_1,testSet$iphonesentiment)
 # Adding results of svm funcation to the pool of the previous models
 combined_1$svm <- svm_1
 combined_1 <- combined_1[,c(ncol(combined_1), 1:(ncol(combined_1)-1))]
-combined_1$dataset <- "downsample manual"
+combined_1$dataset <- "downsample func"
 combined_pred_1$svm<- pred_svm_1
 
 # Converting values from integer to factor and adjusting levels of values according to testSet
@@ -326,11 +326,45 @@ for(i in 1:ncol(combined_pred_1)) {
 # Print confusion matrix for all the models
 for(i in 1:ncol(combined_pred_1)) {
   cmRF <- confusionMatrix(combined_pred_1[,i], testSet$iphonesentiment)
+  print(cmRF$overall)
   print(colnames(combined_pred_1)[i])
-  print(cmRF$table)
+  print(cmRF)
 }
 
+# get accuracy and cappa for testing set
+check1 <- data.frame (Error="", value="",Model="",dataset="")
+check1[1:3] <- factor(check1[1:3])  
+ 
+for(i in 1:ncol(combined_pred_1)) {
+  cmRF <- confusionMatrix(combined_pred_1[,i], testSet$iphonesentiment)
+  
+  check<- cmRF$overall
+  check <- as.data.frame(check)
+  check['Error'] <- row.names(check)
+  colnames(check)[1]<-"value"
+  check$value<- round(check$value, digits = 2)
+  check <- check[1:2,]
+  check <- check[,2:1]
+  check$Model <- colnames(combined_pred_1)[i]
+  check$dataset <- "downsample func"
+  
+  check1<- rbind(check1,check)
+}
 
+check1 <- check1[-1,]
+print(check1)
+
+ggplot(check1, aes(x=Model, y=value,fill=Model))+
+  geom_col()+ggtitle("Error metrics")+theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(Error ~ ., scales="fixed")
+
+# check<- cmRF$overall
+# check <- as.data.frame(check)
+# check['Error'] <- row.names(check)
+# colnames(check)[1]<-"value"
+# check <- check[1:2,]
+# check <- check[,2:1]
+# check$model <- "svm"
 
 #### ********** Manual downsampling (combined_2) ********** ####
 
@@ -408,13 +442,34 @@ for(i in 1:ncol(combined_pred_2)) {
 for(i in 1:ncol(combined_pred_2)) {
   cmRF <- confusionMatrix(combined_pred_2[,i], testSet$iphonesentiment)
   print(colnames(combined_pred_2)[i])
-  print(cmRF$table)
+  print(cmRF)
 }
 
+# get accuracy and cappa for testing set
+check2 <- data.frame (Error="", value="",Model="",dataset="")
+check2[1:3] <- factor(check2[1:3])  
+
+for(i in 1:ncol(combined_pred_2)) {
+  cmRF <- confusionMatrix(combined_pred_2[,i], testSet$iphonesentiment)
+  
+  check<- cmRF$overall
+  check <- as.data.frame(check)
+  check['Error'] <- row.names(check)
+  colnames(check)[1]<-"value"
+  check$value<- round(check$value, digits = 2)
+  check <- check[1:2,]
+  check <- check[,2:1]
+  check$Model <- colnames(combined_pred_1)[i]
+  check$dataset <- "downsample manual"
+  
+  check2<- rbind(check2,check)
+}
+
+check2 <- check2[-1,]
+print(check2)
 
 
-
-#### TRAINING MODELS FOR DATASET WITH Recursive Feature Eliminated (RFE) (combined_3) ####
+####  ********** TRAINING MODELS FOR DATASET WITH Recursive Feature Eliminated (RFE) (combined_3) ####
 
 #### Data partition for training & testing sets ####
 iphoneRFE$iphonesentiment <- as.factor(iphoneRFE$iphonesentiment)
@@ -469,7 +524,7 @@ combined_pred_3 <-combined_pred
 combined_pred_3 <-as.data.frame(combined_pred_3)
 
 
-#### SVM downsample manual -3 ####
+#### SVM downsample manual - 3 ####
 
 model_svm <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
 summary (model_svm)
@@ -480,7 +535,7 @@ svm_3 <- postResample(pred_svm_3,testSet$iphonesentiment)
 # Adding results of svm funcation to the pool of the previous models
 combined_3$svm <- svm_3
 combined_3 <- combined_3[,c(ncol(combined_3), 1:(ncol(combined_3)-1))]
-combined_3$dataset <- "downsample manual"
+combined_3$dataset <- "RFE & downsample manual"
 combined_pred_3$svm<- pred_svm_3
 
 # Converting values from integer to factor and adjusting levels of values according to testSet
@@ -497,7 +552,28 @@ for(i in 1:ncol(combined_pred_3)) {
   print(cmRF$table)
 }
 
+# get accuracy and cappa for testing set
+check3 <- data.frame (Error="", value="",Model="",dataset="")
+check3[1:3] <- factor(check3[1:3])  
 
+for(i in 1:ncol(combined_pred_1)) {
+  cmRF <- confusionMatrix(combined_pred_3[,i], testSet$iphonesentiment)
+  
+  check<- cmRF$overall
+  check <- as.data.frame(check)
+  check['Error'] <- row.names(check)
+  colnames(check)[1]<-"value"
+  check$value<- round(check$value, digits = 2)
+  check <- check[1:2,]
+  check <- check[,2:1]
+  check$Model <- colnames(combined_pred_1)[i]
+  check$dataset <- "RFE & downsample manual"
+  
+  check3<- rbind(check3,check)
+}
+
+check3 <- check3[-1,]
+print(check3)
 
 ####  Melt function to store the errors ####
 combined_all <-rbind(combined_1,combined_2,combined_3) 
@@ -509,53 +585,38 @@ colnames(combined_melt)[1]<-"dataset"
 colnames(combined_melt)[3]<-"Model"
 
 ggplot(combined_melt, aes(x=Model, y=value,fill=Model))+
-  geom_col()+ggtitle("Error metrics for predicted Lattitude")+theme(plot.title = element_text(hjust = 0.5))+
+  geom_col()+ggtitle("Error metrics")+theme(plot.title = element_text(hjust = 0.5))+
   facet_wrap(Error ~ dataset, scales="fixed")
 
-#Run model RF----
-Fit_RF_iphone <- train(iphonesentiment~.,
-                data= trainSet,
-                method = "rf", 
-                trControl = fitControl,
-                tuneLength = 4, 
-                preProcess = c("center","scale"),
-                na.action = na.omit
-)
+check_all <-rbind(check1,check2,check3)
 
-varImp(Fit_RF_iphone)
-postResample(Fit_RF_iphone)
-pred_RF_iphone <- predict(Fit_RF_iphone,testSet)
-
-testSet$predict_iphonesentiment_RF<-pred_RF_iphone 
-testSet$error_RF <- testSet$iphonesentiment - testSet$predict_iphonesentiment_RF
-testSet$error_abs_RF <- abs(testSet$iphonesentiment - testSet$predict_iphonesentiment_RF)
-
-
-ggplot(testSet, aes(x=iphonesentiment, y=error_abs_RF, col=iphonesentiment)) + 
-geom_point() +geom_smooth() 
-
+ggplot(check_all, aes(x=Model, y=value,fill=Model))+
+  geom_col()+ggtitle("Error metrics for testing set")+theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(Error ~ dataset, scales="fixed")
 
 #### Engineering the Dependant variable ####
 
 # Perhaps combining some of these levels will help increase accuracy and kappa. 
-# The dplyr package recode() function can help us with this. 
+# The dplyr package () function can help us with this. 
 
 # create a new dataset that will be used for recoding sentiment
 Iphone_smallmatrix_RC <- Iphone_smallmatrix
+
 # recode sentiment to combine factor levels 0 & 1 and 4 & 5
 Iphone_smallmatrix_RC <- recode(Iphone_smallmatrix$iphonesentiment, '0' = 1, '1' = 1, '2' = 2, '3' = 3, '4' = 4, '5' = 4) 
+
 # inspect results
 summary(Iphone_smallmatrix_RC)
 str(Iphone_smallmatrix_RC)
 # make iphonesentiment a factor
-Iphone_smallmatrix_RC$iphonesentiment <- as.factor(Iphone_smallmatrix$iphonesentiment)
+Iphone_smallmatrix_RC$iphonesentiment <- as.factor(Iphone_smallmatrix_RC$iphonesentiment)
 
 
 # Now model using your best learner. 
 # Did accuracy and kappa increase? Did you review the confusion matrix? 
 
 
-# Principal Component Analysis 
+#### Principal Component Analysis ####
 # Principal Component Analysis (PCA) is a form of feature engineering that removes all of your features
 # and replaces them with mathematical representations of their variance.
 
@@ -563,6 +624,13 @@ Iphone_smallmatrix_RC$iphonesentiment <- as.factor(Iphone_smallmatrix$iphonesent
 # create object containing centered, scaled PCA components from training set
 # excluded the dependent variable and set threshold to .95
 
+# Data partition for training & testing sets #
+Iphone_smallmatrix$iphonesentiment <- as.factor(Iphone_smallmatrix$iphonesentiment)
+
+set.seed(122)
+inTraining <- createDataPartition(Iphone_smallmatrix_down$iphonesentiment, p = .7, list = FALSE)
+trainSet <- Iphone_smallmatrix_down[inTraining,]
+testSet <- Iphone_smallmatrix_down[-inTraining,]
 preprocessParams <- preProcess(trainSet[,-59], method=c("center", "scale", "pca"), thresh = 0.95)
 print(preprocessParams)
 
@@ -572,17 +640,91 @@ print(preprocessParams)
 # We now need to apply the PCA model, create training/testing and add the dependant variable.
 
 # use predict to apply pca parameters, create training, exclude dependant
-train.pca <- predict(preprocessParams, training[,-59])
+train.pca <- predict(preprocessParams, trainSet[,-59])
 
 # add the dependent to training
-train.pca$iphonesentiment <- training$iphonesentiment
+train.pca$iphonesentiment <- trainSet$iphonesentiment
 
 # use predict to apply pca parameters, create testing, exclude dependant
-test.pca <- predict(preprocessParams, testing[,-59])
+test.pca <- predict(preprocessParams, testSet[,-59])
 
 # add the dependent to training
-test.pca$iphonesentiment <- testing$iphonesentiment
+test.pca$iphonesentiment <- testSet$iphonesentiment
 
 # inspect results
 str(train.pca)
 str(test.pca)
+
+
+fitControl <- trainControl(method = "cv", number=3, verboseIter = T, returnResamp = "all",savePredictions = TRUE)
+#Testing models with loop----
+
+combined <- c()
+# models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
+
+models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
+t_0 <- proc.time()
+for(i in models) {
+  
+  Fit_4 <- train(iphonesentiment~.,
+                 data= train.pca,
+                 method = i, 
+                 trControl = fitControl,
+                 tuneLength = 5, 
+                 preProc = "zv",
+                 na.action = na.omit)
+  
+  pred <- predict(Fit_4,test.pca)
+  res <- postResample(pred,test.pca$iphonesentiment)
+  combined <- cbind(combined, res) 
+}
+
+t_1 <- proc.time()
+time_knn <- t_1-t_0
+print(time_knn/60)
+
+colnames(combined) <- models
+combined
+combined_4 <- combined
+combined_4 <- as.data.frame(combined_4)
+combined_4$dataset <- "pca"
+
+saveRDS(Fit_4, file= "Predicting model pca dataset.rds")
+
+# stored performance metrics
+colnames(combined) <- models
+combined_4 <- combined
+combined_4 <- as.data.frame(combined_4)
+
+# stored predicted values
+colnames(combined_pred) <- models
+combined_pred_4 <-combined_pred 
+combined_pred_4 <-as.data.frame(combined_pred_4)
+
+#### SVM downsample manual -4  ####
+
+model_svm <- svm(iphonesentiment~., data = train.pca, na.action =na.omit,scale = FALSE)
+pred_svm_4 <- predict(model_svm,test.pca)
+svm_4 <- postResample(pred_svm_4,test.pca$iphonesentiment)
+
+# Adding results of svm funcation to the pool of the previous models
+combined_4$svm <- svm_4
+combined_4 <- combined_1[,c(ncol(combined_4), 1:(ncol(combined_4)-1))]
+combined_4$dataset <- "downsample manual"
+combined_pred_1$svm<- pred_svm_4
+
+# Converting values from integer to factor and adjusting levels of values according to test.pca
+for(i in 1:ncol(combined_pred_4)) {
+  combined_pred_1[,i] <- as.factor(combined_pred_4[,i])
+  levels(combined_pred_4[,i]) <- c("0", "1", "2","3", "4", "5")
+  
+}
+
+# Print confusion matrix for all the models
+for(i in 1:ncol(combined_pred_4)) {
+  cmRF <- confusionMatrix(combined_pred_4[,i], test.pca$iphonesentiment)
+  print(cmRF$overall)
+  print(colnames(combined_pred_4)[i])
+  print(cmRF)
+}
+
