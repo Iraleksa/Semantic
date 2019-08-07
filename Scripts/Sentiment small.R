@@ -925,18 +925,141 @@ che1
 require(gridExtra)
 grid.arrange(comb, che, nrow=2)
 
-# library("ggpubr")
-figure <- arrange(comb1, che1,
-                    labels = c("Model´s", "Testing set" ),
-                    ncol = 1, nrow = 2)
-figure
+#### Preprocessing -2 ####
+#Aftre I have trained several models with the several datasets, I did not get any satisfying error metrics,
+# so I will come back to preprocessing again 
+# This time I will pay attention to the columns with only iphones and will check iphonesentiment == 0.
+# If iphonesentiment == 0 it could mean 2 cases: 1)  very negative , 2) no any values.
+# If iphonesentiment == 0  means, that no anu values are present for iphone I will exclude these lines from the dataset
 
-combined_5
-check5
+# Creating matrix only for iphone products
+i_names <- c("iphone","ios")
+Only_iphone <- Iphone_smallatrix[ , grep(paste(i_names,collapse="|"), names( Iphone_smallatrix ) ) ]
+# Calculate qty of cells in the row !=0 (not empty value)
+Only_iphone$NoEmpty <- apply(Only_iphone[,1:14], 1, function(x) length(which(x !=0)))
 
-combined_4
-check4
 
-combined_1
-check1
+Empty <- filter(Only_iphone,Only_iphone$NoEmpty==0)
+unique(Empty$iphonesentiment)
 
+# 829 observations do not have any input for Iphone products, but Do have sentiment, which have no any sense
+# Let`s exclude empty rows
+
+NoEmpty_iphone <- filter(Only_iphone,Only_iphone$NoEmpty!=0)
+
+# distribution is still  not representative
+plot_ly(NoEmpty_iphone, x= ~NoEmpty_iphone$iphonesentiment, type='histogram')
+
+#Lets downsample
+#### ********** Down Sampling with function downSample  (combined_6)  **********  ####
+NoEmpty_iphone$iphonesentiment <- as.factor(NoEmpty_iphone$iphonesentiment)
+
+NoEmpty_iphone_down <- downSample(NoEmpty_iphone, NoEmpty_iphone$iphonesentiment, list = FALSE, yname = "Class")
+# distribution of the sentiments after downsmapling
+plot_ly(NoEmpty_iphone_down, x= ~NoEmpty_iphone_down$Class, type='histogram')
+
+
+NoEmpty_iphone_down[,16:17] <- NULL
+# Data partition for training & testing sets #
+set.seed(122)
+inTraining <- createDataPartition(NoEmpty_iphone_down$iphonesentiment, p = .7, list = FALSE)
+trainSet <- NoEmpty_iphone_down[inTraining,]
+testSet <- NoEmpty_iphone_down[-inTraining,]
+
+fitControl <- trainControl(method = "cv", number=3, verboseIter = T, returnResamp = "all",savePredictions = TRUE)
+#Testing models with loop----
+
+combined <- c()
+combined_pred <- c()
+models <- c("kknn", "rf","C5.0","svmRadial","gbm","pcaNNet")
+t_0 <- proc.time()
+for(i in models) {
+  
+  Fit_6 <- train(iphonesentiment~.,
+                 data= trainSet,
+                 method = i, 
+                 trControl = fitControl,
+                 tuneLength = 5, 
+                 preProc = "zv",
+                 na.action = na.omit)
+  
+  pred <- predict(Fit_6,testSet)
+  res <- postResample(pred,testSet$iphonesentiment)
+  combined_pred <- cbind(combined_pred, pred)
+  combined <- cbind(combined, res) 
+}
+
+t_1 <- proc.time()
+time_knn <- t_1-t_0
+print(time_knn/60)
+
+saveRDS(Fit_6, file= "Fit_6_Predicting model for downsampled dataset.rds")
+
+# stored performance metrics
+colnames(combined) <- models
+combined_6 <- combined
+combined_6 <- as.data.frame(combined_6)
+
+# stored predicted values
+colnames(combined_pred) <- models
+combined_pred_6 <-combined_pred 
+combined_pred_6 <-as.data.frame(combined_pred_6)
+
+#### SVM downsample manual -6  ####
+
+model_svm6 <- svm(iphonesentiment~., data = trainSet, na.action =na.omit,scale = FALSE)
+pred_svm_6 <- predict(model_svm6,testSet)
+svm_6 <- postResample(pred_svm_6,testSet$iphonesentiment)
+
+saveRDS(svm_6, file= "svm_6_model.rds")
+
+# Adding results of svm funcation to the pool of the previous models
+combined_6$svm <- svm_6
+combined_6 <- combined_6[,c(ncol(combined_6), 1:(ncol(combined_6)-1))]
+combined_6$dataset <- "Only Ipnone downsample func"
+combined_pred_6$svm<- pred_svm_6
+
+# Converting values from integer to factor and adjusting levels of values according to testSet
+for(i in 1:ncol(combined_pred_6)) {
+  combined_pred_6[,i] <- as.factor(combined_pred_6[,i])
+  levels(combined_pred_6[,i]) <- c("0", "1", "2","3", "4", "5")
+  
+}
+
+# Print confusion matrix for all the models
+for(i in 1:ncol(combined_pred_6)) {
+  cmRF <- confusionMatrix(combined_pred_6[,i], testSet$iphonesentiment)
+  print(cmRF$overall)
+  print(colnames(combined_pred_6)[i])
+  print(cmRF$table)
+}
+
+# get accuracy and cappa for testing set
+check6 <- data.frame (Error="", value="",Model="",dataset="")
+check6[1:3] <- factor(check6[1:3])  
+
+for(i in 1:ncol(combined_pred_6)) {
+  cmRF <- confusionMatrix(combined_pred_6[,i], testSet$iphonesentiment)
+  
+  check<- cmRF$overall
+  check <- as.data.frame(check)
+  check['Error'] <- row.names(check)
+  colnames(check)[1]<-"value"
+  check$value<- round(check$value, digits = 2)
+  check <- check[1:2,]
+  check <- check[,2:1]
+  check$Model <- colnames(combined_pred_6)[i]
+  check$dataset <- "Only Ipnone downsample func"
+  
+  check6<- rbind(check6,check)
+}
+
+check6 <- check6[-1,]
+print(check6)
+
+ggplot(check6, aes(x=Model, y=value,fill=Model))+
+  geom_col()+ggtitle("Error metrics")+theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(Error ~ ., scales="fixed")
+
+
+esquisse:: esquisser()
