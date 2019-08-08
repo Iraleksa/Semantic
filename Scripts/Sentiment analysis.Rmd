@@ -19,6 +19,21 @@ knitr::opts_chunk$set(
 )
 ```
 
+```{r loading libraries, include=FALSE}
+pacman::p_load(readr,autoplotly,ggplot2,plotly,tidyverse,party,lubridate, caret,dplyr)
+
+
+library(e1071)
+library(kknn)
+library(C50)
+library(FactoMineR)
+library(fastAdaboost)
+library(adabag)
+
+
+```
+
+
 # Executive summary
 
 
@@ -31,6 +46,13 @@ knitr::opts_chunk$set(
 
 
 # Explore the Data
+
+```{r Libraries, include=FALSE}
+
+pacman::p_load(readr,autoplotly,ggplot2,plotly,tidyverse,party,lubridate,caret,dplyr,rmdformats,knitr,png,rmarkdown,devtools)
+
+
+```
 
 
 
